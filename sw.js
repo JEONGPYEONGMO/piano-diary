@@ -1,4 +1,4 @@
-const CACHE = 'piano-diary-v2';
+const CACHE = 'piano-diary-v3';
 const CORE  = [
   './',
   './manifest.json',
