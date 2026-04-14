@@ -525,6 +525,39 @@
     background: var(--black); color: #fff; border-color: var(--black);
   }
   .song-toggle-btn.active:hover { background: #333; }
+
+  /* ── 연습 타이머 ── */
+  .practice-timer-row {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 14px; flex-wrap: wrap;
+  }
+  .btn-start {
+    background: var(--green); color: #fff;
+    font-size: 0.88rem; font-weight: 600;
+    padding: 10px 22px; border-radius: 8px; border: none;
+    cursor: pointer; transition: all 0.15s;
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .btn-start:hover { background: #219a52; }
+  .btn-start:disabled { opacity: 0.4; cursor: default; }
+  .btn-stop {
+    background: var(--red); color: #fff;
+    font-size: 0.88rem; font-weight: 600;
+    padding: 10px 22px; border-radius: 8px; border: none;
+    cursor: pointer; transition: all 0.15s;
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .btn-stop:hover { background: #a93226; }
+  .btn-stop:disabled { opacity: 0.4; cursor: default; }
+  .practice-timer-display {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.6rem; font-weight: 700;
+    color: var(--black); letter-spacing: 0.05em;
+    background: var(--cream); border-radius: 8px;
+    padding: 6px 16px; min-width: 90px; text-align: center;
+  }
 </style>
 </head>
 <body>
@@ -593,6 +626,11 @@
     <!-- 연습기록 -->
     <div class="section-title" style="margin-top:24px">📝 연습 기록</div>
     <div class="card">
+      <div class="practice-timer-row">
+        <button class="btn-start" id="practiceStartBtn">▶ 시작</button>
+        <button class="btn-stop" id="practiceStopBtn" disabled>■ 종료</button>
+        <div class="practice-timer-display" id="practiceTimerDisplay" style="display:none">00:00</div>
+      </div>
       <div class="form-row">
         <div class="form-group">
           <label>날짜</label>
@@ -600,7 +638,7 @@
         </div>
         <div class="form-group">
           <label>연습 시간 (분)</label>
-          <input type="number" id="pDuration" placeholder="30" min="1" max="300">
+          <input type="number" id="pDuration" placeholder="30" min="1" max="300" readonly>
         </div>
       </div>
       <div class="form-group">
@@ -771,6 +809,10 @@ let localData = {
   recordings: {} // stored as {id: {title, date, size, dataUrl}}
 };
 
+// Practice timer state
+let practiceStartTime = null;
+let practiceTimerInterval = null;
+
 // Recording state
 let mediaRecorder = null;
 let audioChunks   = [];
@@ -904,6 +946,7 @@ function init() {
     document.getElementById('sec-' + key.dataset.tab).classList.add('active');
     if (key.dataset.tab === 'stats') renderStats();
     if (key.dataset.tab === 'songs') renderSongList();
+    if (key.dataset.tab === 'attendance') renderSongToggles();
   });
 
   // Calendar nav
@@ -929,6 +972,8 @@ function init() {
   document.getElementById('pDate').value = today();
   document.getElementById('addPractice').addEventListener('click', addPractice);
   document.getElementById('pSong').addEventListener('input', renderSongToggles);
+  document.getElementById('practiceStartBtn').addEventListener('click', startPractice);
+  document.getElementById('practiceStopBtn').addEventListener('click', stopPractice);
 
   // Songs
   document.getElementById('addSong').addEventListener('click', addSong);
@@ -970,6 +1015,45 @@ function selectSongToggle(name) {
   const input = document.getElementById('pSong');
   input.value = (input.value.trim() === name) ? '' : name;
   renderSongToggles();
+}
+
+// ────────────────────────────────────────
+//  Practice Timer
+// ────────────────────────────────────────
+function startPractice() {
+  practiceStartTime = new Date();
+  document.getElementById('pDate').value = today();
+  document.getElementById('pDuration').value = '';
+
+  const display = document.getElementById('practiceTimerDisplay');
+  display.style.display = 'block';
+  display.textContent = '00:00';
+
+  practiceTimerInterval = setInterval(() => {
+    const elapsed = Math.floor((new Date() - practiceStartTime) / 1000);
+    const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+    const s = String(elapsed % 60).padStart(2, '0');
+    display.textContent = `${m}:${s}`;
+  }, 1000);
+
+  document.getElementById('practiceStartBtn').disabled = true;
+  document.getElementById('practiceStopBtn').disabled = false;
+}
+
+function stopPractice() {
+  if (!practiceStartTime) return;
+
+  const elapsed = Math.max(1, Math.round((new Date() - practiceStartTime) / 60000));
+  document.getElementById('pDuration').value = elapsed;
+
+  clearInterval(practiceTimerInterval);
+  practiceTimerInterval = null;
+  practiceStartTime = null;
+
+  document.getElementById('practiceTimerDisplay').style.display = 'none';
+  document.getElementById('practiceStartBtn').disabled = false;
+  document.getElementById('practiceStopBtn').disabled = true;
+  showToast(`연습 시간 ${elapsed}분 기록됨`);
 }
 
 // ────────────────────────────────────────
