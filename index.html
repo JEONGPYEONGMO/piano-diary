@@ -1,0 +1,1385 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>피아노 연습 다이어리</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#111110">
+<!-- iOS PWA -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="피아노 다이어리">
+<link rel="apple-touch-icon" href="icon.svg">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+
+<!-- ================================================================
+  Firebase 설정 방법:
+  1. https://console.firebase.google.com 에서 새 프로젝트 생성
+  2. Realtime Database 활성화 (테스트 모드)
+  3. 프로젝트 설정 > 웹 앱 추가 > 아래 firebaseConfig 값 교체
+================================================================ -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, set, get, push, remove, onValue }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  // ▼▼▼ 여기에 본인 Firebase 설정 입력 ▼▼▼
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+  };
+  // ▲▲▲ 설정 끝 ▲▲▲
+
+  let app, db;
+  try {
+    if (firebaseConfig.apiKey === 'YOUR_API_KEY' ||
+        (firebaseConfig.databaseURL || '').includes('YOUR_PROJECT')) {
+      throw new Error('Firebase 미설정 (플레이스홀더 값)');
+    }
+    app = initializeApp(firebaseConfig);
+    db = getDatabase(app);
+    window._db = db;
+    window._fbReady = true;
+    window._fbRef = ref;
+    window._fbSet = set;
+    window._fbGet = get;
+    window._fbPush = push;
+    window._fbRemove = remove;
+    window._fbOnValue = onValue;
+    document.dispatchEvent(new Event('fbReady'));
+  } catch(e) {
+    console.warn('Firebase 미설정 — 로컬 모드로 실행됩니다.');
+    window._fbReady = false;
+    document.dispatchEvent(new Event('fbReady'));
+  }
+</script>
+
+<style>
+  :root {
+    --ivory:   #faf8f2;
+    --cream:   #f0ece0;
+    --black:   #111110;
+    --ebony:   #1c1c1b;
+    --gray:    #6b6b68;
+    --lgray:   #c8c4b8;
+    --accent:  #2a2a28;
+    --gold:    #c9a84c;
+    --red:     #c0392b;
+    --green:   #27ae60;
+    --blue:    #2980b9;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--ivory);
+    color: var(--black);
+    min-height: 100vh;
+  }
+
+  /* ── 헤더 ── */
+  header {
+    background: var(--black);
+    color: var(--ivory);
+    padding: 20px 24px 0;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .header-top {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-bottom: 16px;
+  }
+  .logo {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.4rem; font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .logo span { color: var(--gold); }
+  .fb-status {
+    font-size: 0.72rem; color: var(--lgray);
+    background: rgba(255,255,255,0.08);
+    padding: 3px 10px; border-radius: 20px;
+  }
+  .fb-status.ok { color: #7ecf8e; }
+
+  /* ── 피아노 건반 탭 ── */
+  .piano-tabs {
+    display: flex; gap: 2px;
+    overflow-x: auto; padding-bottom: 0;
+  }
+  .piano-tabs::-webkit-scrollbar { display: none; }
+
+  .tab-key {
+    position: relative;
+    flex-shrink: 0;
+    padding: 10px 18px 14px;
+    cursor: pointer;
+    font-size: 0.82rem; font-weight: 500;
+    letter-spacing: 0.03em;
+    transition: all 0.15s;
+    border-radius: 0 0 6px 6px;
+    user-select: none;
+  }
+  .tab-key.white-key {
+    background: var(--ivory);
+    color: var(--black);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-bottom: none;
+  }
+  .tab-key.black-key {
+    background: var(--ebony);
+    color: var(--cream);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-bottom: none;
+    padding-bottom: 8px;
+  }
+  .tab-key.active.white-key {
+    background: #fff;
+    color: var(--black);
+    box-shadow: 0 -3px 0 var(--gold) inset;
+  }
+  .tab-key.active.black-key {
+    background: #333;
+    color: #fff;
+    box-shadow: 0 -3px 0 var(--gold) inset;
+  }
+  .tab-key:hover { opacity: 0.85; }
+  .tab-icon { display: block; font-size: 1rem; margin-bottom: 2px; }
+
+  /* ── 메인 ── */
+  main { max-width: 720px; margin: 0 auto; padding: 24px 16px 80px; }
+
+  .section { display: none; }
+  .section.active { display: block; }
+
+  .section-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.3rem; font-weight: 600;
+    color: var(--black); margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--black);
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  /* ── 공통 카드 ── */
+  .card {
+    background: #fff;
+    border: 1px solid var(--cream);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  }
+
+  /* ── 버튼 ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 9px 18px; border-radius: 8px; border: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.85rem; font-weight: 500;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-black  { background: var(--black); color: #fff; }
+  .btn-black:hover  { background: #333; }
+  .btn-gold   { background: var(--gold); color: #fff; }
+  .btn-gold:hover   { background: #b8942a; }
+  .btn-outline {
+    background: transparent; color: var(--black);
+    border: 1.5px solid var(--black);
+  }
+  .btn-outline:hover { background: var(--cream); }
+  .btn-danger { background: var(--red); color: #fff; }
+  .btn-danger:hover { background: #a93226; }
+  .btn-sm { padding: 5px 12px; font-size: 0.78rem; }
+
+  /* ── 입력 폼 ── */
+  .form-group { margin-bottom: 14px; }
+  .form-group label {
+    display: block; font-size: 0.78rem; font-weight: 500;
+    color: var(--gray); margin-bottom: 5px; text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .form-group input, .form-group select, .form-group textarea {
+    width: 100%; padding: 9px 12px;
+    border: 1.5px solid var(--cream);
+    border-radius: 8px; font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem; color: var(--black);
+    background: var(--ivory); transition: border 0.15s;
+  }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+    outline: none; border-color: var(--black);
+  }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* ─── 1. 출결 ─── */
+  .month-nav {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .month-label {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.1rem; font-weight: 600;
+  }
+  .month-nav .btn { padding: 6px 14px; }
+
+  .calendar {
+    display: grid; grid-template-columns: repeat(7, 1fr);
+    gap: 4px; margin-bottom: 16px;
+  }
+  .cal-header {
+    text-align: center; font-size: 0.72rem; font-weight: 500;
+    color: var(--gray); padding: 4px 0;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .cal-header:first-child { color: #e74c3c; }
+  .cal-header:last-child  { color: #3498db; }
+
+  .cal-day {
+    aspect-ratio: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    border-radius: 8px; cursor: pointer;
+    font-size: 0.82rem; font-weight: 400;
+    transition: all 0.15s; border: 1.5px solid transparent;
+    background: var(--cream);
+  }
+  .cal-day:hover:not(.empty) { border-color: var(--black); }
+  .cal-day.empty { background: transparent; cursor: default; }
+  .cal-day.today { border-color: var(--black); font-weight: 600; }
+  .cal-day.attended { background: #d5f0dc; }
+  .cal-day.absent   { background: #fad7d5; }
+  .cal-day.makeup   { background: #fef3cd; }
+  .cal-day .day-dot { font-size: 0.65rem; margin-top: 1px; }
+
+  .att-legend {
+    display: flex; gap: 12px; flex-wrap: wrap;
+    font-size: 0.78rem; color: var(--gray); margin-bottom: 14px;
+  }
+  .att-legend span { display: flex; align-items: center; gap: 5px; }
+  .dot { width: 10px; height: 10px; border-radius: 3px; }
+  .dot-att  { background: #d5f0dc; border: 1px solid #27ae60; }
+  .dot-abs  { background: #fad7d5; border: 1px solid #e74c3c; }
+  .dot-make { background: #fef3cd; border: 1px solid #f39c12; }
+
+  .att-summary {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 10px; margin-top: 10px;
+  }
+  .att-stat {
+    background: var(--ivory); border-radius: 10px;
+    padding: 14px; text-align: center;
+    border: 1px solid var(--cream);
+  }
+  .att-stat .num {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.8rem; font-weight: 700; line-height: 1;
+  }
+  .att-stat .lbl { font-size: 0.72rem; color: var(--gray); margin-top: 4px; }
+
+  /* ─── 2. 연습기록 ─── */
+  .practice-item {
+    display: flex; align-items: flex-start;
+    justify-content: space-between; gap: 10px;
+  }
+  .practice-meta { flex: 1; }
+  .practice-song {
+    font-weight: 600; font-size: 0.95rem; margin-bottom: 3px;
+  }
+  .practice-detail {
+    font-size: 0.78rem; color: var(--gray);
+    display: flex; gap: 10px; flex-wrap: wrap;
+  }
+  .practice-detail span { display: flex; align-items: center; gap: 3px; }
+  .difficulty-stars { color: var(--gold); letter-spacing: -1px; }
+  .practice-date {
+    font-size: 0.72rem; color: var(--lgray);
+    white-space: nowrap; padding-top: 2px;
+  }
+  .practice-memo {
+    font-size: 0.78rem; color: var(--gray);
+    margin-top: 6px; padding: 6px 10px;
+    background: var(--ivory); border-radius: 6px;
+    border-left: 3px solid var(--gold);
+  }
+
+  /* ─── 3. 진도 ─── */
+  .song-card .song-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .song-name {
+    font-family: 'Playfair Display', serif;
+    font-size: 1rem; font-weight: 600;
+  }
+  .song-composer { font-size: 0.78rem; color: var(--gray); }
+  .song-badge {
+    font-size: 0.7rem; padding: 3px 8px; border-radius: 20px;
+    font-weight: 500;
+  }
+  .badge-learning { background: #e8f4fd; color: #2980b9; }
+  .badge-done     { background: #d5f0dc; color: #27ae60; }
+  .badge-paused   { background: var(--cream); color: var(--gray); }
+
+  .progress-bar-wrap {
+    background: var(--cream); border-radius: 10px;
+    height: 8px; overflow: hidden; margin-bottom: 8px;
+  }
+  .progress-bar {
+    height: 100%; border-radius: 10px;
+    background: linear-gradient(90deg, var(--black), var(--gray));
+    transition: width 0.4s ease;
+  }
+  .progress-labels {
+    display: flex; justify-content: space-between;
+    font-size: 0.72rem; color: var(--gray);
+  }
+  .progress-input {
+    width: 70px; padding: 4px 8px;
+    border: 1px solid var(--cream); border-radius: 6px;
+    font-size: 0.82rem; text-align: center;
+  }
+
+  /* ─── 4. 녹음 ─── */
+  .rec-center {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 16px;
+    padding: 30px 20px;
+  }
+  .rec-btn-wrap { position: relative; }
+  .rec-btn {
+    width: 88px; height: 88px; border-radius: 50%;
+    background: var(--black); border: 4px solid var(--black);
+    cursor: pointer; display: flex; align-items: center;
+    justify-content: center; font-size: 2rem;
+    transition: all 0.2s; box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  }
+  .rec-btn:hover { transform: scale(1.05); }
+  .rec-btn.recording {
+    background: var(--red); border-color: var(--red);
+    animation: pulse 1.2s ease infinite;
+  }
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(192,57,43,0.5); }
+    50%      { box-shadow: 0 0 0 14px rgba(192,57,43,0); }
+  }
+  .rec-time {
+    font-family: 'Playfair Display', serif;
+    font-size: 2rem; font-weight: 600;
+    letter-spacing: 0.1em; color: var(--black);
+  }
+  .rec-status { font-size: 0.82rem; color: var(--gray); }
+  .rec-daily-notice {
+    background: #fef9e7; border: 1px solid #f9ca24;
+    border-radius: 8px; padding: 10px 16px;
+    font-size: 0.82rem; color: #856404; text-align: center;
+  }
+
+  .recording-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .recording-info { flex: 1; }
+  .recording-title { font-weight: 600; font-size: 0.9rem; }
+  .recording-sub { font-size: 0.75rem; color: var(--gray); margin-top: 2px; }
+  .recording-actions { display: flex; gap: 6px; }
+
+  audio { width: 100%; margin-top: 10px; }
+  audio::-webkit-media-controls-panel { background: var(--cream); }
+
+  /* ─── 5. 통계 ─── */
+  .stat-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat-box {
+    background: var(--black); color: var(--ivory);
+    border-radius: 12px; padding: 20px;
+    text-align: center;
+  }
+  .stat-box .big {
+    font-family: 'Playfair Display', serif;
+    font-size: 2.2rem; font-weight: 700; line-height: 1;
+    color: var(--gold);
+  }
+  .stat-box .unit { font-size: 0.8rem; color: var(--lgray); margin-top: 4px; }
+
+  .chart-wrap { margin-top: 8px; }
+  .bar-row {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 10px;
+  }
+  .bar-label { font-size: 0.78rem; color: var(--gray); min-width: 32px; }
+  .bar-track {
+    flex: 1; background: var(--cream); border-radius: 4px; height: 18px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%; border-radius: 4px;
+    background: linear-gradient(90deg, var(--black), #555);
+    transition: width 0.5s ease;
+  }
+  .bar-val { font-size: 0.75rem; color: var(--gray); min-width: 28px; text-align: right; }
+
+  /* ── 모달 ── */
+  .modal-bg {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5); z-index: 200;
+    align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-bg.open { display: flex; }
+  .modal {
+    background: #fff; border-radius: 16px;
+    padding: 24px; width: 100%; max-width: 440px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    animation: slideUp 0.2s ease;
+  }
+  @keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to   { transform: translateY(0); opacity: 1; }
+  }
+  .modal-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.1rem; font-weight: 600;
+    margin-bottom: 18px; padding-bottom: 10px;
+    border-bottom: 1.5px solid var(--cream);
+  }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+  /* ── toast ── */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--black); color: var(--ivory);
+    padding: 10px 20px; border-radius: 30px; font-size: 0.85rem;
+    z-index: 999; opacity: 0; transition: opacity 0.3s;
+    white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
+
+  /* ─── 곡 날짜 & 댓글 ─── */
+  .song-dates {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    font-size: 0.75rem; color: var(--gray); margin-top: 5px;
+  }
+  .song-dates span { display: flex; align-items: center; gap: 3px; }
+
+  .song-comments { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+  .comment-item {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 8px 10px; background: var(--ivory);
+    border-radius: 8px; border-left: 3px solid var(--lgray);
+  }
+  .comment-body { flex: 1; }
+  .comment-text { font-size: 0.83rem; color: var(--black); white-space: pre-wrap; }
+  .comment-date { font-size: 0.7rem; color: var(--lgray); margin-top: 3px; }
+
+  .comment-form {
+    margin-top: 10px; display: flex; flex-direction: column; gap: 6px;
+  }
+  .comment-form textarea {
+    width: 100%; padding: 8px 10px;
+    border: 1.5px solid var(--cream); border-radius: 8px;
+    font-family: 'DM Sans', sans-serif; font-size: 0.85rem;
+    background: var(--ivory); resize: vertical; min-height: 60px;
+    transition: border 0.15s;
+  }
+  .comment-form textarea:focus { outline: none; border-color: var(--black); }
+  .comment-form-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+  /* ── 반응형 ── */
+  @media (max-width: 480px) {
+    .form-row { grid-template-columns: 1fr; }
+    .stat-grid { grid-template-columns: 1fr 1fr; }
+    .att-summary { grid-template-columns: repeat(3,1fr); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-top">
+    <div class="logo">🎹 Piano <span>Diary</span></div>
+    <div class="fb-status" id="fbStatus">⟳ 연결 중</div>
+  </div>
+  <nav class="piano-tabs" id="tabNav">
+    <div class="tab-key white-key active" data-tab="attendance">
+      <span class="tab-icon">📅</span>출결
+    </div>
+    <div class="tab-key black-key" data-tab="songs">
+      <span class="tab-icon">🎵</span>진도
+    </div>
+    <div class="tab-key white-key" data-tab="stats">
+      <span class="tab-icon">📊</span>통계
+    </div>
+  </nav>
+</header>
+
+<main>
+
+  <!-- ══ 1. 출결 + 연습 + 진도 + 녹음 통합 ══ -->
+  <section class="section active" id="sec-attendance">
+
+    <!-- 출결 -->
+    <div class="section-title">📅 출결 기록</div>
+    <div class="card">
+      <div class="month-nav">
+        <button class="btn btn-outline btn-sm" id="prevMonth">◀</button>
+        <div class="month-label" id="monthLabel"></div>
+        <button class="btn btn-outline btn-sm" id="nextMonth">▶</button>
+      </div>
+      <div class="att-legend">
+        <span><div class="dot dot-att"></div> 출석</span>
+        <span><div class="dot dot-abs"></div> 결석</span>
+        <span><div class="dot dot-make"></div> 보강</span>
+      </div>
+      <div class="calendar" id="calGrid">
+        <div class="cal-header">일</div>
+        <div class="cal-header">월</div>
+        <div class="cal-header">화</div>
+        <div class="cal-header">수</div>
+        <div class="cal-header">목</div>
+        <div class="cal-header">금</div>
+        <div class="cal-header">토</div>
+      </div>
+      <div class="att-summary">
+        <div class="att-stat">
+          <div class="num" id="attCount" style="color:var(--green)">0</div>
+          <div class="lbl">출석</div>
+        </div>
+        <div class="att-stat">
+          <div class="num" id="absCount" style="color:var(--red)">0</div>
+          <div class="lbl">결석</div>
+        </div>
+        <div class="att-stat">
+          <div class="num" id="makeCount" style="color:var(--gold)">0</div>
+          <div class="lbl">보강</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 연습기록 -->
+    <div class="section-title" style="margin-top:24px">📝 연습 기록</div>
+    <div class="card">
+      <div class="form-row">
+        <div class="form-group">
+          <label>날짜</label>
+          <input type="date" id="pDate">
+        </div>
+        <div class="form-group">
+          <label>연습 시간 (분)</label>
+          <input type="number" id="pDuration" placeholder="30" min="1" max="300">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>곡명</label>
+        <input type="text" id="pSong" placeholder="예: 쇼팽 녹턴 Op.9 No.2">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>난이도</label>
+          <select id="pDiff">
+            <option value="1">⭐ 쉬움</option>
+            <option value="2">⭐⭐ 보통</option>
+            <option value="3" selected>⭐⭐⭐ 적당</option>
+            <option value="4">⭐⭐⭐⭐ 어려움</option>
+            <option value="5">⭐⭐⭐⭐⭐ 매우 어려움</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>기분</label>
+          <select id="pMood">
+            <option value="😊">😊 좋음</option>
+            <option value="😐">😐 보통</option>
+            <option value="😔">😔 힘들었음</option>
+            <option value="🔥">🔥 집중 최고!</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>메모</label>
+        <textarea id="pMemo" rows="2" placeholder="오늘의 연습 포인트, 잘된 점, 개선점..."></textarea>
+      </div>
+      <button class="btn btn-black" id="addPractice">＋ 기록 저장</button>
+    </div>
+    <div id="practiceList"></div>
+
+    <!-- 녹음 -->
+    <div class="section-title" style="margin-top:24px">🎙️ 오늘의 녹음</div>
+    <div class="card">
+      <div class="rec-center">
+        <div id="recDailyNotice" class="rec-daily-notice" style="display:none">
+          ✅ 오늘 녹음이 이미 있습니다. 추가 녹음은 이전 녹음 삭제 후 가능해요.
+        </div>
+        <div class="rec-btn-wrap">
+          <div class="rec-btn" id="recBtn">🎙️</div>
+        </div>
+        <div class="rec-time" id="recTimer">00:00</div>
+        <div class="rec-status" id="recStatus">버튼을 눌러 녹음 시작</div>
+        <div class="form-group" style="width:100%">
+          <label>녹음 제목 (선택)</label>
+          <input type="text" id="recTitle" placeholder="예: 쇼팽 녹턴 1절 연습">
+        </div>
+      </div>
+    </div>
+    <div id="recList"></div>
+
+  </section>
+
+  <!-- ══ 2. 진도 ══ -->
+  <section class="section" id="sec-songs">
+    <div class="section-title">🎵 곡 진도</div>
+    <div class="card">
+      <div class="form-row">
+        <div class="form-group">
+          <label>곡명</label>
+          <input type="text" id="sName" placeholder="예: 엘리제를 위하여">
+        </div>
+        <div class="form-group">
+          <label>작곡가</label>
+          <input type="text" id="sComposer" placeholder="Beethoven">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>시작일</label>
+          <input type="date" id="sStartDate">
+        </div>
+        <div class="form-group">
+          <label>종료일</label>
+          <input type="date" id="sEndDate">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>진도 (%)</label>
+          <input type="number" id="sProgress" placeholder="0" min="0" max="100">
+        </div>
+        <div class="form-group">
+          <label>상태</label>
+          <select id="sStatus">
+            <option value="learning">학습 중</option>
+            <option value="done">완성</option>
+            <option value="paused">일시정지</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-black" id="addSong">＋ 곡 추가</button>
+    </div>
+    <div id="songList"></div>
+  </section>
+
+  <!-- ══ 3. 통계 ══ -->
+  <section class="section" id="sec-stats">
+    <div class="section-title">📊 통계</div>
+
+    <div class="stat-grid">
+      <div class="stat-box">
+        <div class="big" id="statTotalDays">0</div>
+        <div class="unit">총 연습일</div>
+      </div>
+      <div class="stat-box">
+        <div class="big" id="statTotalMin">0</div>
+        <div class="unit">총 연습시간(분)</div>
+      </div>
+      <div class="stat-box">
+        <div class="big" id="statAttRate">0%</div>
+        <div class="unit">출석률 (이번달)</div>
+      </div>
+      <div class="stat-box">
+        <div class="big" id="statSongs">0</div>
+        <div class="unit">완성 곡 수</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-title" style="font-size:1rem; border:none; margin-bottom:12px">
+        월별 연습시간 (분)
+      </div>
+      <div class="chart-wrap" id="monthChart"></div>
+    </div>
+  </section>
+
+</main>
+
+<!-- 출결 모달 -->
+<div class="modal-bg" id="attModal">
+  <div class="modal">
+    <div class="modal-title" id="attModalDate">날짜 선택</div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap">
+      <button class="btn btn-outline" id="markAtt">✅ 출석</button>
+      <button class="btn btn-outline" id="markAbs">❌ 결석</button>
+      <button class="btn btn-outline" id="markMake">🔄 보강</button>
+      <button class="btn btn-danger btn-sm" id="markClear">삭제</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="closeAttModal">닫기</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ────────────────────────────────────────
+//  State
+// ────────────────────────────────────────
+let db, fbRef, fbSet, fbGet, fbPush, fbRemove, fbOnValue;
+let useFirebase = false;
+
+// Local fallback data
+let localData = {
+  attendance: {},
+  practice:   {},
+  songs:      {},
+  recordings: {} // stored as {id: {title, date, size, dataUrl}}
+};
+
+// Recording state
+let mediaRecorder = null;
+let audioChunks   = [];
+let recInterval   = null;
+let recSeconds    = 0;
+let isRecording   = false;
+
+// Calendar state
+let calYear  = new Date().getFullYear();
+let calMonth = new Date().getMonth();
+
+// Selected date for modal
+let selectedDate = null;
+
+// ────────────────────────────────────────
+//  Firebase init
+// ────────────────────────────────────────
+document.addEventListener('fbReady', async () => {
+  if (window._fbReady) {
+    useFirebase = true;
+    db        = window._db;
+    fbRef     = window._fbRef;
+    fbSet     = window._fbSet;
+    fbGet     = window._fbGet;
+    fbPush    = window._fbPush;
+    fbRemove  = window._fbRemove;
+    fbOnValue = window._fbOnValue;
+
+    document.getElementById('fbStatus').textContent = '🔥 Firebase 연결';
+    document.getElementById('fbStatus').classList.add('ok');
+
+    // Subscribe to realtime updates
+    fbOnValue(fbRef(db, '/'), snap => {
+      const val = snap.val() || {};
+      localData.attendance = val.attendance || {};
+      localData.practice   = val.practice   || {};
+      localData.songs      = val.songs      || {};
+      // recordings are local only
+      renderAll();
+    });
+  } else {
+    document.getElementById('fbStatus').textContent = '💾 로컬 모드';
+    loadLocalStorage();
+    renderAll();
+  }
+  init();
+});
+
+// ────────────────────────────────────────
+//  localStorage fallback
+// ────────────────────────────────────────
+function loadLocalStorage() {
+  const saved = localStorage.getItem('pianoDiary');
+  if (saved) {
+    const d = JSON.parse(saved);
+    localData.attendance = d.attendance || {};
+    localData.practice   = d.practice   || {};
+    localData.songs      = d.songs      || {};
+    localData.recordings = d.recordings || {};
+  }
+}
+function saveLocalStorage() {
+  localStorage.setItem('pianoDiary', JSON.stringify(localData));
+}
+
+// ────────────────────────────────────────
+//  DB helpers
+// ────────────────────────────────────────
+async function dbSet(path, val) {
+  if (useFirebase) {
+    await fbSet(fbRef(db, path), val);
+  } else {
+    // set nested path
+    const parts = path.replace(/^\//, '').split('/');
+    let obj = localData;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!obj[parts[i]]) obj[parts[i]] = {};
+      obj = obj[parts[i]];
+    }
+    obj[parts[parts.length - 1]] = val;
+    saveLocalStorage();
+    renderAll();
+  }
+}
+async function dbRemove(path) {
+  if (useFirebase) {
+    await fbRemove(fbRef(db, path));
+  } else {
+    const parts = path.replace(/^\//, '').split('/');
+    let obj = localData;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!obj[parts[i]]) return;
+      obj = obj[parts[i]];
+    }
+    delete obj[parts[parts.length - 1]];
+    saveLocalStorage();
+    renderAll();
+  }
+}
+async function dbPush(path, val) {
+  if (useFirebase) {
+    const newRef = fbPush(fbRef(db, path));
+    await fbSet(newRef, val);
+    return newRef.key;
+  } else {
+    const id = 'id_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+    const parts = path.replace(/^\//, '').split('/');
+    let obj = localData;
+    for (let i = 0; i < parts.length; i++) {
+      if (!obj[parts[i]]) obj[parts[i]] = {};
+      obj = obj[parts[i]];
+    }
+    obj[id] = val;
+    saveLocalStorage();
+    renderAll();
+    return id;
+  }
+}
+
+// ────────────────────────────────────────
+//  Init
+// ────────────────────────────────────────
+function init() {
+  // Tab nav
+  document.getElementById('tabNav').addEventListener('click', e => {
+    const key = e.target.closest('.tab-key');
+    if (!key) return;
+    document.querySelectorAll('.tab-key').forEach(k => k.classList.remove('active'));
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    key.classList.add('active');
+    document.getElementById('sec-' + key.dataset.tab).classList.add('active');
+    if (key.dataset.tab === 'stats') renderStats();
+    if (key.dataset.tab === 'songs') renderSongList();
+  });
+
+  // Calendar nav
+  document.getElementById('prevMonth').addEventListener('click', () => {
+    calMonth--; if (calMonth < 0) { calMonth = 11; calYear--; }
+    renderCalendar();
+  });
+  document.getElementById('nextMonth').addEventListener('click', () => {
+    calMonth++; if (calMonth > 11) { calMonth = 0; calYear++; }
+    renderCalendar();
+  });
+
+  // Attendance modal
+  document.getElementById('markAtt').addEventListener('click',  () => markAttendance('attended'));
+  document.getElementById('markAbs').addEventListener('click',  () => markAttendance('absent'));
+  document.getElementById('markMake').addEventListener('click', () => markAttendance('makeup'));
+  document.getElementById('markClear').addEventListener('click',() => markAttendance(null));
+  document.getElementById('closeAttModal').addEventListener('click', () => {
+    document.getElementById('attModal').classList.remove('open');
+  });
+
+  // Practice
+  document.getElementById('pDate').value = today();
+  document.getElementById('addPractice').addEventListener('click', addPractice);
+
+  // Songs
+  document.getElementById('addSong').addEventListener('click', addSong);
+
+  // Recording
+  document.getElementById('recBtn').addEventListener('click', toggleRecording);
+
+  renderCalendar();
+}
+
+// ────────────────────────────────────────
+//  Render All
+// ────────────────────────────────────────
+function renderAll() {
+  renderCalendar();
+  renderPracticeList();
+  renderSongList();
+  renderRecList();
+}
+
+// ────────────────────────────────────────
+//  Calendar
+// ────────────────────────────────────────
+function renderCalendar() {
+  const grid = document.getElementById('calGrid');
+  // Remove day cells (keep headers)
+  const headers = Array.from(grid.querySelectorAll('.cal-header'));
+  grid.innerHTML = '';
+  headers.forEach(h => grid.appendChild(h));
+
+  document.getElementById('monthLabel').textContent =
+    `${calYear}년 ${calMonth + 1}월`;
+
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const todayStr = today();
+
+  for (let i = 0; i < firstDay; i++) {
+    const el = document.createElement('div');
+    el.className = 'cal-day empty';
+    grid.appendChild(el);
+  }
+
+  let attC = 0, absC = 0, makeC = 0;
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const status = localData.attendance[dateStr];
+    const el = document.createElement('div');
+    el.className = 'cal-day';
+    if (dateStr === todayStr) el.classList.add('today');
+    if (status) el.classList.add(status);
+
+    const dot = status === 'attended' ? '✅' : status === 'absent' ? '❌' : status === 'makeup' ? '🔄' : '';
+    el.innerHTML = `<span>${d}</span><span class="day-dot">${dot}</span>`;
+    el.addEventListener('click', () => openAttModal(dateStr));
+    grid.appendChild(el);
+
+    if (status === 'attended') attC++;
+    else if (status === 'absent') absC++;
+    else if (status === 'makeup') makeC++;
+  }
+
+  document.getElementById('attCount').textContent  = attC;
+  document.getElementById('absCount').textContent  = absC;
+  document.getElementById('makeCount').textContent = makeC;
+}
+
+function openAttModal(dateStr) {
+  selectedDate = dateStr;
+  document.getElementById('attModalDate').textContent = `${dateStr} 출결 설정`;
+  document.getElementById('attModal').classList.add('open');
+}
+async function markAttendance(status) {
+  if (!selectedDate) return;
+  if (status === null) {
+    await dbRemove(`/attendance/${selectedDate}`);
+  } else {
+    await dbSet(`/attendance/${selectedDate}`, status);
+  }
+  document.getElementById('attModal').classList.remove('open');
+  renderCalendar();
+  showToast(status ? `${selectedDate} → ${status === 'attended' ? '출석' : status === 'absent' ? '결석' : '보강'} 저장` : '삭제됨');
+}
+
+// ────────────────────────────────────────
+//  Practice
+// ────────────────────────────────────────
+async function addPractice() {
+  const song  = document.getElementById('pSong').value.trim();
+  const date  = document.getElementById('pDate').value;
+  const dur   = parseInt(document.getElementById('pDuration').value) || 0;
+  const diff  = document.getElementById('pDiff').value;
+  const mood  = document.getElementById('pMood').value;
+  const memo  = document.getElementById('pMemo').value.trim();
+
+  if (!song || !date || !dur) { showToast('곡명, 날짜, 시간을 입력해주세요'); return; }
+
+  try {
+    await dbPush('/practice', { song, date, duration: dur, difficulty: parseInt(diff), mood, memo, createdAt: Date.now() });
+    document.getElementById('pSong').value = '';
+    document.getElementById('pDuration').value = '';
+    document.getElementById('pMemo').value = '';
+    showToast('연습 기록 저장 ✓');
+  } catch(e) {
+    showToast('저장 실패: ' + (e.message || e));
+    console.error('addPractice error:', e);
+  }
+}
+
+function renderPracticeList() {
+  const list = document.getElementById('practiceList');
+  const items = Object.entries(localData.practice || {})
+    .sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0))
+    .slice(0, 30);
+
+  if (!items.length) {
+    list.innerHTML = '<div style="text-align:center; color:var(--gray); padding:30px">연습 기록이 없습니다 🎹</div>';
+    return;
+  }
+
+  list.innerHTML = items.map(([id, p]) => `
+    <div class="card">
+      <div class="practice-item">
+        <div class="practice-meta">
+          <div class="practice-song">${p.song}</div>
+          <div class="practice-detail">
+            <span>⏱ ${p.duration}분</span>
+            <span class="difficulty-stars">${'⭐'.repeat(p.difficulty || 1)}</span>
+            <span>${p.mood || ''}</span>
+          </div>
+          ${p.memo ? `<div class="practice-memo">${p.memo}</div>` : ''}
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+          <div class="practice-date">${p.date}</div>
+          <button class="btn btn-danger btn-sm" onclick="deletePractice('${id}')">삭제</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function deletePractice(id) {
+  await dbRemove(`/practice/${id}`);
+  showToast('삭제됨');
+}
+
+// ────────────────────────────────────────
+//  Songs
+// ────────────────────────────────────────
+async function addSong() {
+  const name      = document.getElementById('sName').value.trim();
+  const composer  = document.getElementById('sComposer').value.trim();
+  const progress  = parseInt(document.getElementById('sProgress').value) || 0;
+  const status    = document.getElementById('sStatus').value;
+  const startDate = document.getElementById('sStartDate').value;
+  const endDate   = document.getElementById('sEndDate').value;
+
+  if (!name) { showToast('곡명을 입력해주세요'); return; }
+
+  try {
+    await dbPush('/songs', { name, composer, progress, status, startDate, endDate, createdAt: Date.now() });
+    document.getElementById('sName').value = '';
+    document.getElementById('sComposer').value = '';
+    document.getElementById('sProgress').value = '';
+    document.getElementById('sStartDate').value = '';
+    document.getElementById('sEndDate').value = '';
+    showToast('곡 추가 ✓');
+  } catch(e) {
+    showToast('저장 실패: ' + (e.message || e));
+    console.error('addSong error:', e);
+  }
+}
+
+function renderSongList() {
+  const list = document.getElementById('songList');
+  if (!list) return;
+  const items = Object.entries(localData.songs || {})
+    .sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0));
+
+  if (!items.length) {
+    list.innerHTML = '<div style="text-align:center; color:var(--gray); padding:30px">곡을 추가해보세요 🎵</div>';
+    return;
+  }
+
+  list.innerHTML = items.map(([id, s]) => {
+    const badgeClass = s.status === 'done' ? 'badge-done' : s.status === 'paused' ? 'badge-paused' : 'badge-learning';
+    const badgeText  = s.status === 'done' ? '✅ 완성' : s.status === 'paused' ? '⏸ 일시정지' : '📖 학습 중';
+
+    const datesHtml = (s.startDate || s.endDate) ? `
+      <div class="song-dates">
+        ${s.startDate ? `<span>📅 시작 ${s.startDate}</span>` : ''}
+        ${s.endDate   ? `<span>🏁 종료 ${s.endDate}</span>`   : ''}
+      </div>` : '';
+
+    const comments = Object.entries(s.comments || {})
+      .sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0));
+
+    const commentsHtml = comments.length ? `
+      <div class="song-comments">
+        ${comments.map(([cid, c]) => `
+          <div class="comment-item">
+            <div class="comment-body">
+              <div class="comment-text">${c.text.replace(/</g,'&lt;')}</div>
+              <div class="comment-date">${c.date}</div>
+            </div>
+            <button class="btn btn-danger btn-sm" style="padding:2px 8px;font-size:0.7rem;flex-shrink:0"
+              onclick="deleteSongComment('${id}','${cid}')">×</button>
+          </div>
+        `).join('')}
+      </div>` : '';
+
+    return `
+      <div class="card song-card">
+        <div class="song-header">
+          <div>
+            <div class="song-name">${s.name}</div>
+            ${s.composer ? `<div class="song-composer">${s.composer}</div>` : ''}
+            ${datesHtml}
+          </div>
+          <span class="song-badge ${badgeClass}">${badgeText}</span>
+        </div>
+        <div class="progress-bar-wrap">
+          <div class="progress-bar" style="width:${s.progress || 0}%"></div>
+        </div>
+        <div class="progress-labels">
+          <span>${s.progress || 0}%</span>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input class="progress-input" type="number" value="${s.progress || 0}"
+              min="0" max="100" onchange="updateProgress('${id}', this.value)">
+            <button class="btn btn-danger btn-sm" onclick="deleteSong('${id}')">삭제</button>
+          </div>
+        </div>
+        ${commentsHtml}
+        <div class="comment-form" id="cform-${id}" style="display:none">
+          <textarea id="ctxt-${id}" placeholder="이 곡에 대한 메모를 입력하세요..."></textarea>
+          <div class="comment-form-actions">
+            <button class="btn btn-outline btn-sm" onclick="toggleCommentForm('${id}')">취소</button>
+            <button class="btn btn-black btn-sm" onclick="addSongComment('${id}')">저장</button>
+          </div>
+        </div>
+        <button class="btn btn-outline btn-sm" style="margin-top:10px"
+          onclick="toggleCommentForm('${id}')">💬 메모 추가</button>
+      </div>
+    `;
+  }).join('');
+}
+
+async function updateProgress(id, val) {
+  await dbSet(`/songs/${id}/progress`, Math.min(100, Math.max(0, parseInt(val) || 0)));
+  showToast('진도 업데이트 ✓');
+}
+async function deleteSong(id) {
+  await dbRemove(`/songs/${id}`);
+  showToast('삭제됨');
+}
+
+function toggleCommentForm(id) {
+  const form = document.getElementById('cform-' + id);
+  if (!form) return;
+  const isHidden = form.style.display === 'none';
+  form.style.display = isHidden ? 'block' : 'none';
+  if (isHidden) document.getElementById('ctxt-' + id).focus();
+}
+
+async function addSongComment(songId) {
+  const textarea = document.getElementById('ctxt-' + songId);
+  const text = textarea ? textarea.value.trim() : '';
+  if (!text) { showToast('메모를 입력해주세요'); return; }
+  await dbPush(`/songs/${songId}/comments`, { text, date: today(), createdAt: Date.now() });
+  showToast('메모 저장 ✓');
+}
+
+async function deleteSongComment(songId, commentId) {
+  await dbRemove(`/songs/${songId}/comments/${commentId}`);
+  showToast('삭제됨');
+}
+
+// ────────────────────────────────────────
+//  Recording
+// ────────────────────────────────────────
+function todayHasRecording() {
+  const t = today();
+  return Object.values(localData.recordings || {}).some(r => r.date === t);
+}
+
+async function toggleRecording() {
+  if (isRecording) {
+    stopRecording();
+  } else {
+    if (todayHasRecording()) {
+      showToast('오늘 녹음이 이미 있습니다');
+      return;
+    }
+    startRecording();
+  }
+}
+
+async function startRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+    mediaRecorder.addEventListener('dataavailable', e => audioChunks.push(e.data));
+    mediaRecorder.addEventListener('stop', saveRecording);
+    mediaRecorder.start();
+    isRecording = true;
+    recSeconds  = 0;
+    document.getElementById('recBtn').classList.add('recording');
+    document.getElementById('recBtn').textContent = '⏹';
+    document.getElementById('recStatus').textContent = '녹음 중... 다시 누르면 중지';
+    recInterval = setInterval(() => {
+      recSeconds++;
+      const m = String(Math.floor(recSeconds/60)).padStart(2,'0');
+      const s = String(recSeconds % 60).padStart(2,'0');
+      document.getElementById('recTimer').textContent = `${m}:${s}`;
+    }, 1000);
+  } catch(e) {
+    showToast('마이크 접근 권한이 필요합니다');
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder) {
+    mediaRecorder.stop();
+    mediaRecorder.stream.getTracks().forEach(t => t.stop());
+  }
+  clearInterval(recInterval);
+  isRecording = false;
+  document.getElementById('recBtn').classList.remove('recording');
+  document.getElementById('recBtn').textContent = '🎙️';
+  document.getElementById('recStatus').textContent = '녹음 저장됨! 아래에서 확인하세요';
+}
+
+function saveRecording() {
+  const blob = new Blob(audioChunks, { type: 'audio/webm' });
+  const reader = new FileReader();
+  reader.onload = () => {
+    const title = document.getElementById('recTitle').value.trim() || `녹음 ${today()}`;
+    const id    = 'rec_' + Date.now();
+    const rec   = {
+      id, title, date: today(),
+      duration: recSeconds,
+      size: Math.round(blob.size / 1024),
+      dataUrl: reader.result
+    };
+    localData.recordings[id] = rec;
+    saveLocalStorage();
+    renderRecList();
+    showToast('녹음 저장 ✓');
+  };
+  reader.readAsDataURL(blob);
+}
+
+function renderRecList() {
+  const list = document.getElementById('recList');
+  const notice = document.getElementById('recDailyNotice');
+  notice.style.display = todayHasRecording() ? 'block' : 'none';
+
+  const items = Object.entries(localData.recordings || {})
+    .sort((a, b) => b[1].id.localeCompare(a[1].id));
+
+  if (!items.length) {
+    list.innerHTML = '<div style="text-align:center; color:var(--gray); padding:30px">녹음 기록이 없습니다 🎙️</div>';
+    return;
+  }
+
+  list.innerHTML = items.map(([id, r]) => {
+    const m = String(Math.floor(r.duration/60)).padStart(2,'0');
+    const s = String(r.duration % 60).padStart(2,'0');
+    return `
+      <div class="card">
+        <div class="recording-item">
+          <div class="recording-info">
+            <div class="recording-title">🎵 ${r.title}</div>
+            <div class="recording-sub">${r.date} · ${m}:${s} · ${r.size}KB</div>
+          </div>
+          <div class="recording-actions">
+            <button class="btn btn-black btn-sm" onclick="downloadRec('${id}')">⬇ 다운</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteRec('${id}')">삭제</button>
+          </div>
+        </div>
+        <audio controls src="${r.dataUrl}"></audio>
+      </div>
+    `;
+  }).join('');
+}
+
+function downloadRec(id) {
+  const r = localData.recordings[id];
+  if (!r) return;
+  const a = document.createElement('a');
+  a.href = r.dataUrl;
+  a.download = `${r.title}_${r.date}.webm`;
+  a.click();
+  showToast('다운로드 시작 ✓');
+}
+function deleteRec(id) {
+  delete localData.recordings[id];
+  saveLocalStorage();
+  renderRecList();
+  showToast('삭제됨');
+}
+
+// ────────────────────────────────────────
+//  Stats
+// ────────────────────────────────────────
+function renderStats() {
+  const practices = Object.values(localData.practice || {});
+  const songs     = Object.values(localData.songs    || {});
+  const att       = localData.attendance || {};
+
+  // Total practice days & minutes
+  const daySet = new Set(practices.map(p => p.date));
+  const totalMin = practices.reduce((s, p) => s + (p.duration || 0), 0);
+  document.getElementById('statTotalDays').textContent = daySet.size;
+  document.getElementById('statTotalMin').textContent  = totalMin;
+
+  // This month attendance rate
+  const ym = `${calYear}-${String(calMonth+1).padStart(2,'0')}`;
+  const thisMonthAtt = Object.entries(att)
+    .filter(([k]) => k.startsWith(ym));
+  const attCount  = thisMonthAtt.filter(([,v]) => v === 'attended' || v === 'makeup').length;
+  const totalMark = thisMonthAtt.length;
+  document.getElementById('statAttRate').textContent =
+    totalMark ? Math.round(attCount / totalMark * 100) + '%' : '-';
+
+  // Completed songs
+  document.getElementById('statSongs').textContent = songs.filter(s => s.status === 'done').length;
+
+  // Monthly chart
+  const monthlyMin = {};
+  practices.forEach(p => {
+    if (!p.date) return;
+    const ym2 = p.date.slice(0, 7);
+    monthlyMin[ym2] = (monthlyMin[ym2] || 0) + (p.duration || 0);
+  });
+  const months = Object.keys(monthlyMin).sort().slice(-6);
+  const maxMin = Math.max(...months.map(m => monthlyMin[m]), 1);
+
+  const chart = document.getElementById('monthChart');
+  if (!months.length) { chart.innerHTML = '<div style="color:var(--gray);font-size:0.85rem">데이터 없음</div>'; return; }
+
+  chart.innerHTML = months.map(m => `
+    <div class="bar-row">
+      <div class="bar-label">${m.slice(5)}월</div>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:${Math.round(monthlyMin[m]/maxMin*100)}%"></div>
+      </div>
+      <div class="bar-val">${monthlyMin[m]}분</div>
+    </div>
+  `).join('');
+}
+
+// ────────────────────────────────────────
+//  Utils
+// ────────────────────────────────────────
+function today() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// Expose to inline onclick
+window.deletePractice  = deletePractice;
+window.deleteSong      = deleteSong;
+window.updateProgress  = updateProgress;
+window.downloadRec     = downloadRec;
+window.deleteRec       = deleteRec;
+
+// ── PWA 서비스워커 등록 ──
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(() => console.log('SW 등록 완료'))
+      .catch(e => console.warn('SW 등록 실패:', e));
+  });
+}
+</script>
+</body>
+</html>
