@@ -495,6 +495,36 @@
     .stat-grid { grid-template-columns: 1fr 1fr; }
     .att-summary { grid-template-columns: repeat(3,1fr); }
   }
+
+  /* ── 연습 기록 곡명 토글 버튼 ── */
+  .song-toggle-area {
+    margin-top: 8px;
+  }
+  .song-toggle-label {
+    font-size: 0.72rem; font-weight: 500;
+    color: var(--gray); margin-bottom: 6px;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .song-toggle-btns {
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .song-toggle-btn {
+    padding: 5px 13px;
+    border-radius: 20px;
+    border: 1.5px solid var(--lgray);
+    background: transparent;
+    color: var(--black);
+    font-size: 0.78rem;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .song-toggle-btn:hover { border-color: var(--black); background: var(--cream); }
+  .song-toggle-btn.active {
+    background: var(--black); color: #fff; border-color: var(--black);
+  }
+  .song-toggle-btn.active:hover { background: #333; }
 </style>
 </head>
 <body>
@@ -576,6 +606,10 @@
       <div class="form-group">
         <label>곡명</label>
         <input type="text" id="pSong" placeholder="예: 쇼팽 녹턴 Op.9 No.2">
+        <div class="song-toggle-area" id="songToggleArea" style="display:none">
+          <div class="song-toggle-label">진도 곡에서 선택</div>
+          <div class="song-toggle-btns" id="songToggleBtns"></div>
+        </div>
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -894,6 +928,7 @@ function init() {
   // Practice
   document.getElementById('pDate').value = today();
   document.getElementById('addPractice').addEventListener('click', addPractice);
+  document.getElementById('pSong').addEventListener('input', renderSongToggles);
 
   // Songs
   document.getElementById('addSong').addEventListener('click', addSong);
@@ -905,12 +940,46 @@ function init() {
 }
 
 // ────────────────────────────────────────
+//  Song Toggle (연습 기록 곡명 선택)
+// ────────────────────────────────────────
+function renderSongToggles() {
+  const area = document.getElementById('songToggleArea');
+  const btns = document.getElementById('songToggleBtns');
+  if (!area || !btns) return;
+
+  const songs = Object.values(localData.songs || {})
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+  if (!songs.length) {
+    area.style.display = 'none';
+    return;
+  }
+
+  area.style.display = 'block';
+  const currentSong = document.getElementById('pSong').value.trim();
+
+  btns.innerHTML = songs.map(s => {
+    const isActive = s.name === currentSong;
+    const safeName = s.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    return `<button type="button" class="song-toggle-btn${isActive ? ' active' : ''}"
+      onclick="selectSongToggle('${safeName}')">${s.name}</button>`;
+  }).join('');
+}
+
+function selectSongToggle(name) {
+  const input = document.getElementById('pSong');
+  input.value = (input.value.trim() === name) ? '' : name;
+  renderSongToggles();
+}
+
+// ────────────────────────────────────────
 //  Render All
 // ────────────────────────────────────────
 function renderAll() {
   renderCalendar();
   renderPracticeList();
   renderSongList();
+  renderSongToggles();
   renderRecList();
 }
 
@@ -997,6 +1066,7 @@ async function addPractice() {
     document.getElementById('pSong').value = '';
     document.getElementById('pDuration').value = '';
     document.getElementById('pMemo').value = '';
+    renderSongToggles();
     showToast('연습 기록 저장 ✓');
   } catch(e) {
     showToast('저장 실패: ' + (e.message || e));
